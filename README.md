@@ -64,6 +64,8 @@ La VM puede descargar este repositorio público por HTTPS sin credenciales de Gi
 
    Guarda el bloque en `/etc/nginx/sites-available/altura`, actívalo en `sites-enabled`, desactiva el sitio predeterminado si sigue activo, ejecuta `sudo nginx -t` y luego `sudo systemctl reload nginx`.
 
+   Comprueba también `sudo iptables -L INPUT -n --line-numbers`. En imágenes Ubuntu de OCI puede existir una regla `REJECT` que bloquee el puerto 80 aunque Nginx funcione y `ufw` esté inactivo. La regla que permite TCP 80 debe estar **antes** de `REJECT` y guardarse con `netfilter-persistent`. [Oracle indica revisar tanto las reglas de red de OCI como el cortafuegos de la instancia](https://docs.oracle.com/en-us/iaas/tools/oci-cli/latest/oci_cli_docs/cmdref/network/security-list.html) y [desaconseja usar UFW para editar las reglas de sus imágenes Ubuntu](https://docs.oracle.com/en-us/iaas/Content/Compute/References/bestpracticescompute.htm).
+
 Para actualizar la web después de publicar cambios en GitHub:
 
 ```bash
