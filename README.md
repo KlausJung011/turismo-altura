@@ -28,98 +28,53 @@ npm.cmd run build
 
 El resultado estará en `dist/`. **No subas** `node_modules/` ni las claves privadas `.key` a la VM ni a un repositorio.
 
-## ¿Es obligatorio usar GitHub?
+## Publicar desde GitHub en Oracle Cloud (Ubuntu 22.04)
 
-**No.** Para esta web puedes compilar en tu equipo y copiar `dist/` directamente a la VM con `scp`, como se explica abajo. GitHub es opcional para guardar el historial, colaborar o respaldar el código.
+La VM puede descargar este repositorio público por HTTPS sin credenciales de GitHub. Necesitas **Git**, **Node.js 22.12 o superior** y **Nginx** en Ubuntu. La clave SSH privada solo se utiliza en tu computadora para entrar a la VM; nunca se sube a GitHub ni se copia al servidor. Asegúrate de que OCI permita SSH (22) y HTTP (80). El puerto 443 requiere configurar HTTPS por separado.
 
-Si decides crear un repositorio, hazlo **dentro de `turismo-altura/`**, no en la carpeta padre donde están tus claves SSH. La `.gitignore` del proyecto excluye `node_modules/`, `dist/`, `.env` y archivos `.key`/`.pem`. Antes de publicar, revisa los archivos que vas a incluir y nunca subas una clave privada. No es necesario instalar Git ni Node.js en la VM si usas el método `scp` de esta guía.
+1. Conéctate por SSH a la VM como `ubuntu` con su IP pública y la clave privada asociada.
+2. En Ubuntu, instala Git, Nginx y Node.js 22. Las [instrucciones de NodeSource](https://github.com/nodesource/distributions/blob/master/DEV_README.md) cubren Ubuntu 22.04.
+3. Descarga y compila la web:
 
-## Publicar en Oracle Cloud (Ubuntu 22.04 + Nginx)
+   ```bash
+   cd ~
+   git clone https://github.com/KlausJung011/turismo-altura.git
+   cd ~/turismo-altura
+   npm ci --include=dev
+   npm run build
+   sudo install -d -m 755 /var/www/altura
+   sudo cp -a dist/. /var/www/altura/
+   ```
 
-Necesitas la IP pública de tu VM Ubuntu 22.04 y la clave SSH privada correspondiente. Usa la clave solo desde tu equipo. Para este despliegue bastan los puertos TCP **22** (SSH) y **80** (HTTP). Abrir **443** no activa HTTPS por sí solo.
+4. Configura Nginx para servir `/var/www/altura` por HTTP:
 
-### 1. Comprobar la red en OCI
+   ```nginx
+   server {
+       listen 80;
+       listen [::]:80;
+       server_name _;
+       root /var/www/altura;
+       index index.html;
 
-Comprueba que la VM tenga reglas de entrada para **SSH (22)** y **HTTP (80)**. Puedes habilitar **HTTPS (443)** cuando configures un dominio y certificado TLS.
+       location / {
+           try_files $uri $uri/ /index.html;
+       }
+   }
+   ```
 
-### 2. Entrar a la VM
+   Guarda el bloque en `/etc/nginx/sites-available/altura`, actívalo en `sites-enabled`, desactiva el sitio predeterminado si sigue activo, ejecuta `sudo nginx -t` y luego `sudo systemctl reload nginx`.
 
-En PowerShell, desde la carpeta padre de `turismo-altura`:
-
-```powershell
-$key = '.\TU_CLAVE_PRIVADA.key'
-$ip = 'IP_PUBLICA_DE_TU_VM'
-ssh -i $key "ubuntu@$ip"
-```
-
-Si SSH indica permisos inseguros de la clave en Windows, ajusta los permisos del archivo para que solo tu usuario tenga acceso de lectura.
-
-### 3. Instalar Nginx en Ubuntu
-
-Dentro de la VM:
-
-```bash
-sudo apt update
-sudo apt install -y nginx
-sudo systemctl enable --now nginx
-mkdir -p ~/altura-dist
-```
-
-Deja esa sesión SSH abierta. En **otra terminal PowerShell**, desde la carpeta `turismo-altura`, copia únicamente el resultado de `npm.cmd run build`:
-
-```powershell
-$key = '..\TU_CLAVE_PRIVADA.key'
-$ip = 'IP_PUBLICA_DE_TU_VM'
-scp -i $key -r .\dist\* "ubuntu@${ip}:~/altura-dist/"
-```
-
-### 4. Configurar el sitio
-
-Vuelve a la sesión SSH de Ubuntu:
+Para actualizar la web después de publicar cambios en GitHub:
 
 ```bash
-sudo mkdir -p /var/www/altura
-sudo cp -a ~/altura-dist/. /var/www/altura/
-sudo nano /etc/nginx/sites-available/altura
+cd ~/turismo-altura
+git pull --ff-only origin main
+npm ci --include=dev
+npm run build
+sudo cp -a dist/. /var/www/altura/
 ```
 
-Pega este bloque en `nano` y guarda con **Ctrl+O**, Enter, **Ctrl+X**:
-
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name _;
-    root /var/www/altura;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-Activa la configuración y verifica Nginx:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/altura /etc/nginx/sites-enabled/altura
-sudo unlink /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-Si `ufw` está activo, permite HTTP antes de probar desde fuera:
-
-```bash
-sudo ufw status
-sudo ufw allow 80/tcp
-```
-
-Abre **http://IP_PUBLICA_DE_TU_VM** en tu navegador, reemplazando el marcador por tu IP real. Si ves la página predeterminada de Nginx, revisa que `default` se haya desactivado y que la configuración de Altura esté habilitada. Si la conexión expira, comprueba la regla de entrada de OCI y el cortafuegos de la VM.
-
-### Actualizaciones
-
-Después de cambiar el código, vuelve a ejecutar `npm.cmd run build` en tu equipo, copia `dist/*` con `scp` y en la VM ejecuta `sudo cp -a ~/altura-dist/. /var/www/altura/`. Nginx servirá los archivos actualizados.
+La versión detallada, con comandos para la instancia del curso y la explicación de cada uno, está en `COMANDOS_DESPLIEGUE_VM.md` **fuera de este repositorio**.
 
 ## Antes de usarlo como agencia real
 
